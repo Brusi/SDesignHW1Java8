@@ -21,6 +21,8 @@ import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Properties;
 
 /**
@@ -116,7 +118,7 @@ public abstract class Parser implements CommandLineParser {
      * Parse the arguments according to the specified options and
      * properties.
      *
-     * @param options the specified Options
+     * @param opts the specified Options
      * @param arguments the command line arguments
      * @param properties command line option name-value pairs
      * @param stopAtNonOption stop parsing the arguments when the first
@@ -127,105 +129,119 @@ public abstract class Parser implements CommandLineParser {
      * @throws ParseException if there are any problems encountered
      * while parsing the command line tokens.
      */
-    public CommandLine parse(Options options, String[] arguments, 
-                             Properties properties, boolean stopAtNonOption)
-        throws ParseException
-    {
-        // initialise members
-        this.options = options;
+	public CommandLine parse(Options opts, String[] arguments,
+			Properties properties, final boolean stopAtNonOption)
+			throws ParseException {
+		// initialise members
+		options = opts;
 
-        // clear out the data in options in case it's been used before (CLI-71)
-        for (Iterator it = options.helpOptions().iterator(); it.hasNext();) {
-            Option opt = (Option) it.next();
-            opt.clearValues();
-        }
+		// clear out the data in options in case it's been used before (CLI-71)
+		((List<Option>) options.helpOptions()).stream().forEach(
+				o -> o.clearValues());
 
-        requiredOptions = options.getRequiredOptions();
-        cmd = new CommandLine();
+		requiredOptions = options.getRequiredOptions();
+		cmd = new CommandLine();
 
-        boolean eatTheRest = false;
+		boolean eatTheRest = false;
 
-        if (arguments == null)
-        {
-            arguments = new String[0];
-        }
+		if (arguments == null) {
+			arguments = new String[0];
+		}
 
-        List tokenList = Arrays.asList(flatten(this.options, 
-                                               arguments, 
-                                               stopAtNonOption));
+		
+		
+		List<String> optsList = Arrays.asList(flatten(options, arguments, stopAtNonOption));
+		
+		Optional<String> edgeOpt = optsList.stream()
+				.filter(t -> t == "--" || (t == "-" && stopAtNonOption) || (!t.startsWith("-") && stopAtNonOption))
+				.findFirst(); // remove ()
 
-        ListIterator iterator = tokenList.listIterator();
+		int index = optsList.size();
+		if (edgeOpt.isPresent()) {
+			index = optsList.indexOf(edgeOpt.get());
+		}
+		
+		List<String> lastPart = optsList.subList(index, optsList.size());
+		List<String> firstPart = optsList.subList(0, index);
+		
 
-        // process each flattened token
-        while (iterator.hasNext())
-        {
-            String t = (String) iterator.next();
+		edgeOpt = firstPart.stream()
+				.filter(t -> t.startsWith("-") && stopAtNonOption && !options.hasOption(t))
+				.findFirst();
+		
+		if (edgeOpt.isPresent()) {
+			index = firstPart.indexOf(edgeOpt.get()) + 1;
+		}
+		
+		List<String> middlePart = firstPart.subList(index, firstPart.size());
+		firstPart = firstPart.subList(0, index);
+		
+		firstPart.stream().forEach(s -> {if (s.startsWith("-")) processOption(s, iter);});
 
-            // the value is the double-dash
-            if ("--".equals(t))
-            {
-                eatTheRest = true;
-            }
+		
+		
+		
+		
+		List tokenList = Arrays.asList(flatten(options, arguments,
+				stopAtNonOption));
 
-            // the value is a single dash
-            else if ("-".equals(t))
-            {
-                if (stopAtNonOption)
-                {
-                    eatTheRest = true;
-                }
-                else
-                {
-                    cmd.addArg(t);
-                }
-            }
+		ListIterator iterator = tokenList.listIterator();
 
-            // the value is an option
-            else if (t.startsWith("-"))
-            {
-                if (stopAtNonOption && !options.hasOption(t))
-                {
-                    eatTheRest = true;
-                    cmd.addArg(t);
-                }
-                else
-                {
-                    processOption(t, iterator);
-                }
-            }
+		// process each flattened token
+		while (iterator.hasNext()) {
+			String t = (String) iterator.next();
 
-            // the value is an argument
-            else
-            {
-                cmd.addArg(t);
+			// the value is the double-dash
+			if ("--".equals(t)) {
+				eatTheRest = true;
+			}
 
-                if (stopAtNonOption)
-                {
-                    eatTheRest = true;
-                }
-            }
+			// the value is a single dash
+			else if ("-".equals(t)) {
+				if (stopAtNonOption) {
+					eatTheRest = true;
+				} else {
+					cmd.addArg(t);
+				}
+			}
 
-            // eat the remaining tokens
-            if (eatTheRest)
-            {
-                while (iterator.hasNext())
-                {
-                    String str = (String) iterator.next();
+			// the value is an option
+			else if (t.startsWith("-")) {
+				if (stopAtNonOption && !opts.hasOption(t)) {
+					eatTheRest = true;
+					cmd.addArg(t);
+				} else {
+					processOption(t, iterator);
+				}
+			}
 
-                    // ensure only one double-dash is added
-                    if (!"--".equals(str))
-                    {
-                        cmd.addArg(str);
-                    }
-                }
-            }
-        }
+			// the value is an argument
+			else {
+				cmd.addArg(t);
 
-        processProperties(properties);
-        checkRequiredOptions();
+				if (stopAtNonOption) {
+					eatTheRest = true;
+				}
+			}
 
-        return cmd;
-    }
+			// eat the remaining tokens
+			if (eatTheRest) {
+				while (iterator.hasNext()) {
+					String str = (String) iterator.next();
+
+					// ensure only one double-dash is added
+					if (!"--".equals(str)) {
+						cmd.addArg(str);
+					}
+				}
+			}
+		}
+
+		processProperties(properties);
+		checkRequiredOptions();
+
+		return cmd;
+	}
 
     /**
      * <p>Sets the values of Options using the values in 
