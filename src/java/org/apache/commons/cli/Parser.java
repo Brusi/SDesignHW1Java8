@@ -16,6 +16,7 @@
  */
 package org.apache.commons.cli;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Iterator;
@@ -24,6 +25,8 @@ import java.util.ListIterator;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * <p><code>Parser</code> creates {@link CommandLine}s.</p>
@@ -150,33 +153,53 @@ public abstract class Parser implements CommandLineParser {
 
 		
 		
-		List<String> optsList = Arrays.asList(flatten(options, arguments, stopAtNonOption));
+		final List<String> optsList = Arrays.asList(flatten(options, arguments, stopAtNonOption));
 		
 		Optional<String> edgeOpt = optsList.stream()
 				.filter(t -> t == "--" || (t == "-" && stopAtNonOption) || (!t.startsWith("-") && stopAtNonOption))
 				.findFirst(); // remove ()
 
-		int index = optsList.size();
-		if (edgeOpt.isPresent()) {
-			index = optsList.indexOf(edgeOpt.get());
-		}
+		int index = edgeOpt.isPresent() ? optsList.indexOf(edgeOpt.get()) : optsList.size();
 		
-		List<String> lastPart = optsList.subList(index, optsList.size());
-		List<String> firstPart = optsList.subList(0, index);
+		Stream<String> firstPart = optsList.stream().limit(index);
+		Stream<String> lastPart = optsList.stream().skip(index);
+		
+		
+		
+		Stream<Stream<String>> strstrstr = firstPart.map(
+				s -> s.startsWith("-") && s != "-" && !(stopAtNonOption && !opts.hasOption(s)) ? 
+				firstPart.skip(optsList.indexOf(s)) : Stream.empty()					
+				);
+				
+		Stream<Stream<String>> strstrstr2 = strstrstr.map(aStream -> {
+			Optional<String> nextOption = aStream.skip(1).filter(s -> s.startsWith("-") && s != "-" && !(stopAtNonOption && !opts.hasOption(s))).findFirst();
+			return !nextOption.isPresent() ? aStream 
+					: aStream.limit(
+							aStream.collect(Collectors.toList()).indexOf(nextOption.get())
+					);
+		});
+		
+		// TODO: check if we should throw an exception outside the forEach.
+		strstrstr2.filter(aStream -> aStream.count() > 0).forEach(singleOptionStream ->processOption(singleOptionStream));
 		
 
-		edgeOpt = firstPart.stream()
-				.filter(t -> t.startsWith("-") && stopAtNonOption && !options.hasOption(t))
-				.findFirst();
+//		edgeOpt = firstPart.stream()
+//				.filter(t -> t.startsWith("-") && stopAtNonOption && !options.hasOption(t))
+//				.findFirst();
+//		
+//		if (edgeOpt.isPresent()) {
+//			index = firstPart.indexOf(edgeOpt.get()) + 1;
+//		}
+//		
+//		List<String> middlePart = firstPart.subList(index, firstPart.size());
+//		firstPart = firstPart.subList(0, index);
 		
-		if (edgeOpt.isPresent()) {
-			index = firstPart.indexOf(edgeOpt.get()) + 1;
-		}
 		
-		List<String> middlePart = firstPart.subList(index, firstPart.size());
-		firstPart = firstPart.subList(0, index);
 		
-		firstPart.stream().forEach(s -> {if (s.startsWith("-")) processOption(s, iter);});
+		
+		
+		
+//		firstPart.stream().forEach(s -> {if (s.startsWith("-")) processOption(s, iter);});
 
 		
 		
@@ -371,6 +394,27 @@ public abstract class Parser implements CommandLineParser {
                                                + opt.getKey());
         }
     }
+    
+    private void processOneArg(Option opt, String str) {
+    	// found a value
+        try
+        {
+            opt.addValueForProcessing( Util.stripLeadingAndTrailingQuotes(str) );
+        }
+        catch (RuntimeException exp) {}
+    }
+    
+    public void processArgs(Option opt, Stream<String> singleOptionStream)
+            throws ParseException
+        {
+            // loop until an option is found
+    		singleOptionStream.skip(1).forEach(str -> processOneArg(opt, str));
+    		if ((opt.getValues() == null) && !opt.hasOptionalArg())
+            {
+                throw new MissingArgumentException("Missing argument for option:"
+                                                   + opt.getKey());
+            }
+        }
 
     /**
      * <p>Process the Option specified by <code>arg</code>
@@ -430,4 +474,43 @@ public abstract class Parser implements CommandLineParser {
         // set the option on the command line
         cmd.addOption(opt);
     }
+    
+	private void processOption(Stream<String> singleOptionStream)
+			throws ParseException {
+		String arg = singleOptionStream.findFirst().get(); // We know that singleOptionStream is not empty.
+		
+		// if there is no option throw an UnrecognisedOptionException
+		if (!options.hasOption(arg)) {
+			throw new UnrecognizedOptionException("Unrecognized option: " + arg);
+		}
+
+		// get the option represented by arg
+		final Option opt = options.getOption(arg);
+
+		// if the option is a required option remove the option from
+		// the requiredOptions list
+		if (opt.isRequired()) {
+			requiredOptions.remove(opt.getKey());
+		}
+
+		// if the option is in an OptionGroup make that option the selected
+		// option of the group
+		if (options.getOptionGroup(opt) != null) {
+			OptionGroup group = options.getOptionGroup(opt);
+
+			if (group.isRequired()) {
+				requiredOptions.remove(group);
+			}
+
+			group.setSelected(opt);
+		}
+
+		// if the option takes an argument value
+		if (opt.hasArg()) {
+			processArgs(opt, singleOptionStream);
+		}
+
+		// set the option on the command line
+		cmd.addOption(opt);
+	}
 }
