@@ -45,6 +45,7 @@ public abstract class Parser implements CommandLineParser {
 
     List<String> tokenList;
     ParseException parseExp = null; // helper for catching and throwing exception from within forEach() of a stream
+    int counter = 0;
     
     /**
      * <p>Subclasses must implement this method to reduce
@@ -162,7 +163,7 @@ public abstract class Parser implements CommandLineParser {
 		tokenList.stream().skip(index).forEach(t -> { if (!"--".equals(t)) eatenRest.add(t); }); // eaten rest
 		
 		parseExp = null;
-		tokenList.stream().limit(index).forEach(t -> handleOption(t)); // handle first part (before eaten rest)
+		tokenList.stream().limit(index).forEach(t -> { if (counter > 0) { counter--; return; } else handleOption(t); }); // handle first part (before eaten rest)
 		if (null != parseExp) {
 			throw (parseExp);
 		}
@@ -395,6 +396,7 @@ public abstract class Parser implements CommandLineParser {
 			try {
 				opt.addValueForProcessing(Util
 						.stripLeadingAndTrailingQuotes(str));
+				counter++;
 			} catch (RuntimeException exp) {
 				iter.previous();
 				break;
