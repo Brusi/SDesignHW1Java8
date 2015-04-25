@@ -29,6 +29,12 @@ public abstract class Parser implements CommandLineParser {
 
 	/** commandline instance */
 	private CommandLine cmd;
+	
+	private boolean eatTheRest;
+	private boolean processArg;
+	private Option opt;
+	private ParseException exceptionToThrow;
+	private boolean processPropertiesBreakLoop;
 
 	/**
 	 * <p>Subclasses must implement this method to reduce
@@ -100,6 +106,15 @@ public abstract class Parser implements CommandLineParser {
 	{
 		return parse(options, arguments, null, stopAtNonOption);
 	}
+	
+	private boolean processArgCheckException() {
+		if (opt.getValues() == null && !opt.hasOptionalArg()) {
+			exceptionToThrow = new MissingArgumentException(
+					"Missing argument for option:" + opt.getKey());
+			return true;
+		}
+		return false;
+	}
 
 	/**
 	 * Parse the arguments according to the specified options and
@@ -116,13 +131,6 @@ public abstract class Parser implements CommandLineParser {
 	 * @throws ParseException if there are any problems encountered
 	 * while parsing the command line tokens.
 	 */
-
-	private boolean eatTheRest;
-	private boolean processArg;
-	private Option opt;
-	private ParseException exceptionToThrow;
-	private boolean processPropertiesBreakLoop;
-
 	public CommandLine parse(Options options, String[] arguments,
 			Properties properties, boolean stopAtNonOption)
 					throws ParseException
@@ -153,10 +161,7 @@ public abstract class Parser implements CommandLineParser {
 				if (options.hasOption(t) && t.startsWith("-"))
 				{
 					processArg = false;
-
-					if (opt.getValues() == null && !opt.hasOptionalArg()) {
-						exceptionToThrow = new MissingArgumentException(
-								"Missing argument for option:" + opt.getKey());
+					if (processArgCheckException()) {
 						return;
 					}
 				} else
@@ -166,11 +171,7 @@ public abstract class Parser implements CommandLineParser {
 								.stripLeadingAndTrailingQuotes(t));
 					} catch (RuntimeException exp) {
 						processArg = false;
-
-						if (opt.getValues() == null && !opt.hasOptionalArg()) {
-							exceptionToThrow = new MissingArgumentException(
-									"Missing argument for option:"
-											+ opt.getKey());
+						if (processArgCheckException()) {
 							return;
 						}
 					}
@@ -257,9 +258,9 @@ public abstract class Parser implements CommandLineParser {
 		});
 
 		// In case the loop ends while still in "processArg" mode.
-		if (processArg && opt.getValues() == null && !opt.hasOptionalArg())
-			exceptionToThrow =  new MissingArgumentException("Missing argument for option:"
-					+ opt.getKey());
+		if (processArg) {
+			processArgCheckException();
+		}
 
 		// Throw any exception that should have been thrown from the forEach.
 		if (exceptionToThrow != null)
