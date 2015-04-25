@@ -203,6 +203,15 @@ public abstract class Parser implements CommandLineParser {
         	if (processArg) {
         		continue;
         	}
+        	
+            // eat the remaining tokens
+			if (eatTheRest) {
+				// ensure only one double-dash is added
+				if (!"--".equals(t)) {
+					cmd.addArg(t);
+				}
+				continue;
+			}
 
             // the value is the double-dash
 			if ("--".equals(t)) {
@@ -287,17 +296,6 @@ public abstract class Parser implements CommandLineParser {
                     eatTheRest = true;
                 }
             }
-
-            // eat the remaining tokens
-			if (eatTheRest) {
-				while (iterator.hasNext()) {
-					String str = (String) iterator.next();
-					// ensure only one double-dash is added
-					if (!"--".equals(str)) {
-						cmd.addArg(str);
-					}
-				}
-			}
         }
         
 		if (throwMissingArgumentException || processArg
