@@ -30,11 +30,9 @@ public abstract class Parser implements CommandLineParser {
 	/** commandline instance */
 	private CommandLine cmd;
 	
-	private boolean eatTheRest;
-	private boolean processArg;
+	private boolean eatTheRest, processArg, processPropertiesBreakLoop;
 	private Option opt;
 	private ParseException exceptionToThrow;
-	private boolean processPropertiesBreakLoop;
 
 	/**
 	 * <p>Subclasses must implement this method to reduce
@@ -108,12 +106,10 @@ public abstract class Parser implements CommandLineParser {
 	}
 	
 	private boolean processArgCheckException() {
-		if (opt.getValues() == null && !opt.hasOptionalArg()) {
-			exceptionToThrow = new MissingArgumentException(
-					"Missing argument for option:" + opt.getKey());
-			return true;
-		}
-		return false;
+		boolean res = opt.getValues() == null && !opt.hasOptionalArg();
+		if (res) exceptionToThrow = new MissingArgumentException(
+				"Missing argument for option:" + opt.getKey());
+		return res;
 	}
 
 	/**
@@ -141,8 +137,7 @@ public abstract class Parser implements CommandLineParser {
 		List requiredOptions = options.getRequiredOptions();
 		cmd = new CommandLine();
 
-		eatTheRest = false;
-		processArg = false;
+		eatTheRest = processArg = false;
 		exceptionToThrow = null;
 
 		List<String> tokenList = Arrays
@@ -158,12 +153,11 @@ public abstract class Parser implements CommandLineParser {
 
 			if (processArg)
 				// found an Option, not an argument
-				if (options.hasOption(t) && t.startsWith("-"))
-				{
+				if (options.hasOption(t) && t.startsWith("-")) {
 					processArg = false;
-					if (processArgCheckException()) {
+					if (processArgCheckException()) 
 						return;
-					}
+					
 				} else
 					// found a value
 					try {
@@ -171,9 +165,9 @@ public abstract class Parser implements CommandLineParser {
 								.stripLeadingAndTrailingQuotes(t));
 					} catch (RuntimeException exp) {
 						processArg = false;
-						if (processArgCheckException()) {
+						if (processArgCheckException()) 
 							return;
-						}
+						
 					}
 			if (processArg)
 				return;
@@ -199,23 +193,19 @@ public abstract class Parser implements CommandLineParser {
 			}
 
 			// the value is an option
-			if (t.startsWith("-"))
-			{
-				if (stopAtNonOption && !options.hasOption(t))
-				{
-					eatTheRest = true;
-					cmd.addArg(t);
+			if (t.startsWith("-")) {
+				if (!options.hasOption(t)) {
+					if (eatTheRest = stopAtNonOption)
+						cmd.addArg(t);
+					else
+						// <processOptions>
+						// if there is no option throw an
+						exceptionToThrow = new UnrecognizedOptionException(
+								"Unrecognized option: " + t);
+					
 					return;
 				}
-				// <processOptions>
-				// if there is no option throw an UnrecognisedOptionException
-				if (!options.hasOption(t))
-				{
-					exceptionToThrow =  new UnrecognizedOptionException("Unrecognized option: "
-							+ t);
-					return;
-				}
-
+				
 				// get the option represented by arg
 				opt = options.getOption(t);
 
@@ -224,12 +214,14 @@ public abstract class Parser implements CommandLineParser {
 				if (opt.isRequired())
 					requiredOptions.remove(opt.getKey());
 
-				// if the option is in an OptionGroup make that option the selected
+				// if the option is in an OptionGroup make that option the
+				// selected
 				// option of the group
 				OptionGroup group = options.getOptionGroup(opt);
 				if (group != null) {
 					if (group.isRequired())
 						requiredOptions.remove(group);
+					
 					try {
 						group.setSelected(opt);
 					} catch (AlreadySelectedException e) {
@@ -241,11 +233,7 @@ public abstract class Parser implements CommandLineParser {
 				cmd.addOption(opt);
 
 				// if the option takes an argument value
-				if (opt.hasArg())
-				{
-					processArg = true;
-					return;
-				}
+				processArg = opt.hasArg(); 
 				// </processOptions>
 				return;
 			}
@@ -253,14 +241,12 @@ public abstract class Parser implements CommandLineParser {
 			// the value is an argument
 			cmd.addArg(t);
 
-			if (stopAtNonOption)
-				eatTheRest = true;
+			eatTheRest = stopAtNonOption; 
 		});
 
 		// In case the loop ends while still in "processArg" mode.
-		if (processArg) {
+		if (processArg) 
 			processArgCheckException();
-		}
 
 		// Throw any exception that should have been thrown from the forEach.
 		if (exceptionToThrow != null)
@@ -270,16 +256,16 @@ public abstract class Parser implements CommandLineParser {
 		if (properties != null) {
 			processPropertiesBreakLoop = false;
 	
-			properties.stringPropertyNames().stream().forEachOrdered(option ->
+			properties.stringPropertyNames().stream().forEachOrdered(optionName ->
 			{
 				if (processPropertiesBreakLoop)
 					return;
 	
-				if (!cmd.hasOption(option)) {
-					Option opt = options.getOption(option);
+				if (!cmd.hasOption(optionName)) {
+					Option opt = options.getOption(optionName);
 	
 					// get the value from the properties instance
-					String value = properties.getProperty(option);
+					String value = properties.getProperty(optionName);
 	
 					if (opt.hasArg()) {
 						if (opt.getValues() == null || opt.getValues().length == 0)
@@ -288,32 +274,26 @@ public abstract class Parser implements CommandLineParser {
 							} catch (RuntimeException exp) {
 								// if we cannot add the value don't worry about it
 							}
-					} else if (!value.toLowerCase().matches("yes|true|1")) {
+					} else if (processPropertiesBreakLoop = !value.toLowerCase().matches("yes|true|1")) //{
 						// if the value is not yes, true or 1 then don't add the
 						// option to the CommandLine
-						processPropertiesBreakLoop = true;
+//						processPropertiesBreakLoop = true;
 						return;
-					}
+//					}
 					cmd.addOption(opt);
 				}
 			});
 		}
 		// </processProperties>
 		
-		// <checkRequiredOptions>
-		// if there are required options that have not been
-		// processsed
-		if (requiredOptions.size() > 0) {
-			String buff = requiredOptions.size() == 1 ? "Missing required option: "
-					: "Missing required options: ";
+		if (requiredOptions.isEmpty())
+			return cmd;
+		
+		String buff = requiredOptions.size() == 1 ? "Missing required option: "
+				: "Missing required options: ";
 
-			// loop through the required options
-			buff = (String)requiredOptions.stream().reduce(buff, (a,b) -> ""+a+b);
-
-			throw new MissingOptionException(buff.toString());
-		}
-		// </checkRequiredOptions>
-
-		return cmd;
+		// loop through the required options
+		throw new MissingOptionException((String)requiredOptions.stream().reduce(buff, (a,b) -> "" + a + b));
+		
 	}
 }
