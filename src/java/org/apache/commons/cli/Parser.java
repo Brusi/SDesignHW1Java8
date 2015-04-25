@@ -173,32 +173,24 @@ public abstract class Parser implements CommandLineParser {
         		// found an Option, not an argument
         		if (options.hasOption(t) && t.startsWith("-"))
         		{
-        			iterator.previous();
         			processArg = false;
         			
 					if ((opt.getValues() == null) && !opt.hasOptionalArg()) {
 						throwMissingArgumentException = true;
 					}
-        			
-        			continue;
-        		}
-        		
-        		// found a value
-        		try
-        		{
-        			opt.addValueForProcessing( Util.stripLeadingAndTrailingQuotes(t) );
-        		}
-        		catch (RuntimeException exp)
-        		{
-        			iterator.previous();
-        			processArg = false;
-        			
-					if ((opt.getValues() == null) && !opt.hasOptionalArg()) {
-						throwMissingArgumentException = true;
+				} else {
+					// found a value
+					try {
+						opt.addValueForProcessing(Util
+								.stripLeadingAndTrailingQuotes(t));
+					} catch (RuntimeException exp) {
+						processArg = false;
+
+						if ((opt.getValues() == null) && !opt.hasOptionalArg()) {
+							throwMissingArgumentException = true;
+						}
 					}
-        			
-        			continue;
-        		}
+				}
         	}
         	if (processArg) {
         		continue;
@@ -406,7 +398,7 @@ public abstract class Parser implements CommandLineParser {
      * @throws ParseException if an argument value is required
      * and it is has not been found.
      */
-    public void processArgs(Option opt, ListIterator iter)
+    private void processArgs(Option opt, ListIterator iter)
         throws ParseException
     {
         // loop until an option is found
