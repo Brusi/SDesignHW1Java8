@@ -128,10 +128,10 @@ public abstract class Parser implements CommandLineParser {
      * while parsing the command line tokens.
      */
     
-    boolean eatTheRest;
-    boolean processArg;
-    boolean processArgsDone;
-    Option opt;
+    private boolean eatTheRest;
+    private boolean processArg;
+    private Option opt;
+    private boolean throwMissingArgumentException;
     
     public CommandLine parse(Options options, String[] arguments, 
                              Properties properties, boolean stopAtNonOption)
@@ -151,7 +151,7 @@ public abstract class Parser implements CommandLineParser {
 
         eatTheRest = false;
         processArg = false;
-        processArgsDone = false;
+        throwMissingArgumentException = false;
 
         if (arguments == null)
         {
@@ -177,8 +177,7 @@ public abstract class Parser implements CommandLineParser {
         			processArg = false;
         			
 					if ((opt.getValues() == null) && !opt.hasOptionalArg()) {
-						throw new MissingArgumentException(
-								"Missing argument for option:" + opt.getKey());
+						throwMissingArgumentException = true;
 					}
         			
         			continue;
@@ -195,8 +194,7 @@ public abstract class Parser implements CommandLineParser {
         			processArg = false;
         			
 					if ((opt.getValues() == null) && !opt.hasOptionalArg()) {
-						throw new MissingArgumentException(
-								"Missing argument for option:" + opt.getKey());
+						throwMissingArgumentException = true;
 					}
         			
         			continue;
@@ -302,12 +300,12 @@ public abstract class Parser implements CommandLineParser {
 			}
         }
         
-        if (processArg) {
-			if ((opt.getValues() == null) && !opt.hasOptionalArg()) {
-				throw new MissingArgumentException(
-						"Missing argument for option:" + opt.getKey());
-			}
-        }
+		if (throwMissingArgumentException || processArg
+				&& (opt.getValues() == null) && !opt.hasOptionalArg()) {
+			throw new MissingArgumentException("Missing argument for option:"
+					+ opt.getKey());
+		}
+        
 
         processProperties(properties);
         checkRequiredOptions();
