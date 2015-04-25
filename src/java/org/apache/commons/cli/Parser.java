@@ -141,10 +141,7 @@ public abstract class Parser implements CommandLineParser {
         this.options = options;
 
         // clear out the data in options in case it's been used before (CLI-71)
-        for (Iterator it = options.helpOptions().iterator(); it.hasNext();) {
-            Option opt = (Option) it.next();
-            opt.clearValues();
-        }
+        options.helpOptions().forEach(o -> ((Option)o).clearValues());
 
         requiredOptions = options.getRequiredOptions();
         cmd = new CommandLine();
@@ -162,10 +159,8 @@ public abstract class Parser implements CommandLineParser {
                                                arguments, 
                                                stopAtNonOption));
 
-//        ListIterator iterator = tokenList.listIterator();
-
         // process each flattened token
-        tokenList.stream().forEach(t -> 
+        tokenList.stream().forEachOrdered(t -> 
         {
         	// Abort in case of exception.
         	if (exceptionToThrow != null) {
@@ -388,19 +383,13 @@ public abstract class Parser implements CommandLineParser {
         // processsed
         if (requiredOptions.size() > 0)
         {
-            Iterator iter = requiredOptions.iterator();
-            StringBuffer buff = new StringBuffer("Missing required option");
-            buff.append(requiredOptions.size() == 1 ? "" : "s");
-            buff.append(": ");
+			String buff = requiredOptions.size() == 1 ? "Missing required option: "
+					: "Missing required options: ";
 
-
-            // loop through the required options
-            while (iter.hasNext())
-            {
-                buff.append(iter.next());
-            }
-
-            throw new MissingOptionException(buff.toString());
+			// loop through the required options
+			buff = (String)requiredOptions.stream().reduce(buff, (a,b) -> ""+a+b);
+			
+			throw new MissingOptionException(buff.toString());
         }
     }
 }
